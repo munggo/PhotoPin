@@ -27,7 +27,7 @@ struct GeoTaggerApp: App {
     }
 }
 
-// MARK: - View Model
+// MARK: - View Model / 뷰 모델
 class GeoTagViewModel: ObservableObject {
     @Published var gpxFile: URL?
     @Published var targetFolder: URL?
@@ -84,7 +84,7 @@ class GeoTagViewModel: ObservableObject {
             gpxFile = panel.url
             addLog("GPX 파일 선택: \(panel.url?.lastPathComponent ?? "")")
             
-            // GPX 파일에서 시간대 정보 자동 감지
+            // Auto-detect timezone from GPX file / GPX 파일에서 시간대 정보 자동 감지
             if let url = panel.url {
                 detectTimezoneFromGPX(url)
             }
@@ -95,10 +95,10 @@ class GeoTagViewModel: ObservableObject {
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
             
-            // GPX 파일에서 TZ 주석 찾기 (예: <!-- TZ: 32400 -->)
+            // Find TZ comment in GPX file (e.g., <!-- TZ: 32400 -->) / GPX 파일에서 TZ 주석 찾기 (예: <!-- TZ: 32400 -->)
             if let tzRange = content.range(of: "<!-- TZ: ([+-]?\\d+) -->", options: .regularExpression) {
                 let tzString = String(content[tzRange])
-                // 숫자 부분 추출
+                // Extract numeric part / 숫자 부분 추출
                 let pattern = try? NSRegularExpression(pattern: "([+-]?\\d+)")
                 if let match = pattern?.firstMatch(in: tzString, range: NSRange(tzString.startIndex..., in: tzString)) {
                     let offsetRange = Range(match.range(at: 1), in: tzString)!
@@ -113,7 +113,7 @@ class GeoTagViewModel: ObservableObject {
                         timezoneOffset = newOffset
                         addLog("✨ GPX에서 시간대 자동 감지: \(newOffset)")
                         
-                        // 시간대 이름 표시
+                        // Display timezone name / 시간대 이름 표시
                         let timezoneName = getTimezoneName(hours: hours)
                         if !timezoneName.isEmpty {
                             addLog("   지역: \(timezoneName)")
@@ -121,7 +121,7 @@ class GeoTagViewModel: ObservableObject {
                     }
                 }
             } else {
-                // GPX 파일의 첫 번째 시간 정보 확인
+                // Check first time info in GPX file / GPX 파일의 첫 번째 시간 정보 확인
                 if content.contains("<time>") && content.contains("Z</time>") {
                     addLog("ℹ️ GPX 파일은 UTC 시간을 사용합니다")
                     addLog("   카메라가 현지 시간인 경우 타임존 오프셋을 설정하세요")
@@ -197,11 +197,11 @@ class GeoTagViewModel: ObservableObject {
         progress = 0
         statusMessage = "처리 중..."
         
-        // Python 스크립트 경로
+        // Python script path / Python 스크립트 경로
         let scriptPath = Bundle.main.resourcePath?.appending("/geotag.py") 
             ?? FileManager.default.currentDirectoryPath.appending("/geotag.py")
         
-        // Process 설정
+        // Process configuration / Process 설정
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         task.arguments = [
@@ -261,7 +261,7 @@ class GeoTagViewModel: ObservableObject {
             if !lineStr.isEmpty {
                 addLog(lineStr)
                 
-                // 진행률 업데이트
+                // Update progress / 진행률 업데이트
                 if lineStr.contains("Processing") || lineStr.contains("처리") {
                     progress = min(progress + 0.1, 0.9)
                 } else if lineStr.contains("directories scanned") {
@@ -288,7 +288,7 @@ class GeoTagViewModel: ObservableObject {
                                                       timeStyle: .medium)
         logMessages.append("[\(timestamp)] \(message)")
         
-        // 최대 500줄 유지
+        // Keep max 500 lines / 최대 500줄 유지
         if logMessages.count > 500 {
             logMessages.removeFirst(logMessages.count - 500)
         }
@@ -301,7 +301,7 @@ class GeoTagViewModel: ObservableObject {
     }
 }
 
-// MARK: - Main Content View
+// MARK: - Main Content View / 메인 콘텐츠 뷰
 struct ContentView: View {
     @StateObject private var viewModel = GeoTagViewModel()
     @State private var showingLogs = false
@@ -309,7 +309,7 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // 배경 그라데이션
+            // Background gradient / 배경 그라데이션
             LinearGradient(
                 colors: [Color(nsColor: .controlBackgroundColor),
                         Color(nsColor: .windowBackgroundColor)],
@@ -319,16 +319,16 @@ struct ContentView: View {
             .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 헤더
+                // Header / 헤더
                 HeaderView()
                     .padding(.horizontal, 30)
                     .padding(.top, 20)
                     .padding(.bottom, 25)
                 
-                // 메인 콘텐츠
+                // Main content / 메인 콘텐츠
                 ScrollView {
                     VStack(spacing: 25) {
-                        // GPX 파일 선택
+                        // GPX file selection / GPX 파일 선택
                         FileSelectionCard(
                             title: "GPX 트랙 파일",
                             icon: "location.circle.fill",
@@ -337,7 +337,7 @@ struct ContentView: View {
                             action: viewModel.selectGPXFile
                         )
                         
-                        // 사진 폴더 선택
+                        // Photo folder selection / 사진 폴더 선택
                         FolderSelectionCard(
                             title: "사진 폴더",
                             icon: "photo.on.rectangle.angled",
@@ -347,7 +347,7 @@ struct ContentView: View {
                             action: viewModel.selectFolder
                         )
                         
-                        // 처리 모드 선택
+                        // Processing mode selection / 처리 모드 선택
                         VStack(alignment: .leading, spacing: 12) {
                             Label("처리 모드", systemImage: "gearshape.2.fill")
                                 .font(.headline)
@@ -370,16 +370,16 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 30)
                         
-                        // 고급 설정
+                        // Advanced settings / 고급 설정
                         AdvancedSettingsView(viewModel: viewModel)
                             .padding(.horizontal, 30)
                         
-                        // 실행 버튼
+                        // Execute button / 실행 버튼
                         ProcessButton(viewModel: viewModel)
                             .padding(.horizontal, 30)
                             .padding(.top, 10)
                         
-                        // 진행률
+                        // Progress / 진행률
                         if viewModel.isProcessing || viewModel.progress > 0 {
                             ProgressBarView(viewModel: viewModel)
                                 .padding(.horizontal, 30)
@@ -389,7 +389,7 @@ struct ContentView: View {
                     .padding(.vertical, 20)
                 }
                 
-                // 하단 상태 바
+                // Bottom status bar / 하단 상태 바
                 StatusBar(viewModel: viewModel, showingLogs: $showingLogs)
             }
         }
@@ -404,7 +404,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Components
+// MARK: - Components / 컴포넌트
 struct HeaderView: View {
     var body: some View {
         VStack(spacing: 8) {
@@ -574,7 +574,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(spacing: 0) {
-                // 타임존 설정
+                // Timezone setting / 타임존 설정
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 12) {
                         Label("타임존 오프셋", systemImage: "clock")
@@ -616,7 +616,7 @@ struct AdvancedSettingsView: View {
                 Divider()
                     .padding(.vertical, 8)
                 
-                // 보간 시간
+                // Interpolation time / 보간 시간
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 12) {
                         Label("보간 시간", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
@@ -654,7 +654,7 @@ struct AdvancedSettingsView: View {
                 }
                 .padding(.vertical, 8)
                 
-                // 외삽 시간
+                // Extrapolation time / 외삽 시간
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 12) {
                         Label("외삽 시간", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
@@ -711,7 +711,7 @@ struct AdvancedSettingsView: View {
     }
 }
 
-// MARK: - Timezone Help View
+// MARK: - Timezone Help View / 타임존 도움말 뷰
 struct TimezoneHelpView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -761,7 +761,7 @@ struct TimezoneHelpView: View {
     }
 }
 
-// MARK: - Help Views
+// MARK: - Help Views / 도움말 뷰
 struct InterpolationHelpView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -952,7 +952,7 @@ struct LogsView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // 헤더
+            // Header / 헤더
             HStack {
                 Text("처리 로그")
                     .font(.headline)
@@ -964,7 +964,7 @@ struct LogsView: View {
             .padding()
             .background(Color(nsColor: .controlBackgroundColor))
             
-            // 로그 내용
+            // Log content / 로그 내용
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
@@ -985,7 +985,7 @@ struct LogsView: View {
                 }
             }
             
-            // 하단 버튼
+            // Bottom buttons / 하단 버튼
             HStack {
                 Button("로그 복사") {
                     NSPasteboard.general.clearContents()

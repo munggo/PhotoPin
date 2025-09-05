@@ -8,24 +8,173 @@
 </p>
 
 <p align="center">
-  <b>GPX 트랙을 사용한 스마트 사진 지오태깅 도구</b><br>
-  Smart Photo Geotagging for macOS
+  <b>Smart Photo Geotagging for macOS</b><br>
+  <i>Add GPS location to your photos using GPX tracks</i>
 </p>
 
 ---
 
+[English](#english) | [한국어](#한국어)
+
+---
+
+## English
+
+## ✨ Features
+
+### 🎯 **Smart Auto Mode**
+Automatically selects the optimal processing method based on file format:
+- **3FR, FFF** (Hasselblad) → Creates XMP sidecar files
+- **JPEG, HEIC** → Embeds metadata directly
+- **40+ RAW formats** fully supported
+
+### 🌍 **GPX Timezone Auto-Detection**
+- Automatically detects timezone information from GPX files
+- Auto-corrects between camera local time and GPS UTC time
+- Supports major timezones (Korea +09:00, China +08:00, etc.)
+
+### 📐 **Precise Location Estimation**
+- **Interpolation**: Accurately calculates positions between GPS points
+- **Extrapolation**: Tags photos outside GPS track with nearest location
+
+### 🎨 **Native macOS App**
+- Modern design based on SwiftUI
+- Full dark mode support
+- Real-time progress display
+- Complete internationalization support
+
+## 📸 Supported Formats
+
+| Camera Brand | Supported Formats |
+|------------|----------|
+| **Common Images** | JPEG, PNG, HEIC, HEIF, TIFF, WebP |
+| **Canon** | CR2, CR3, CRW |
+| **Nikon** | NEF, NRW |
+| **Sony** | ARW, SR2, SRF |
+| **Fujifilm** | RAF |
+| **Olympus** | ORF |
+| **Panasonic** | RW2 |
+| **Pentax** | PEF, PTX |
+| **Hasselblad** | 3FR, FFF |
+| **Phase One** | IIQ |
+| **Leica** | RWL, RAW |
+| **Others** | DNG, X3F, R3D, ARI, etc. |
+
+## 🚀 Installation
+
+### Prerequisites
+- macOS 13.0 (Ventura) or later
+- [ExifTool](https://exiftool.org) installation required
+
+```bash
+# Install ExifTool via Homebrew
+brew install exiftool
+```
+
+### Download and Run
+
+1. **Download Latest Release**
+   - Download `PhotoPin.app.zip` from [Releases](https://github.com/munggo/PhotoPin/releases)
+   - Extract and move to Applications folder
+
+2. **Or Build from Source**
+   ```bash
+   git clone https://github.com/munggo/PhotoPin.git
+   cd PhotoPin
+   
+   # Build Swift app
+   cd GeoTagger
+   swift build --configuration release
+   
+   # Create app bundle
+   cd ..
+   ./create_app_bundle.sh
+   
+   # Run app
+   open dist/GeoTagger.app
+   ```
+
+## 📖 Usage
+
+### 1️⃣ Prepare GPX File
+Various ways to record GPS tracks:
+- **Smartphone Apps**: Strava, AllTrails, GPS Logger
+- **Smartwatches**: Apple Watch, Garmin
+- **Dedicated GPS Devices**: Garmin GPS, GPS loggers
+
+### 2️⃣ Run PhotoPin
+1. **Select GPX File** - Click "Select File..." button
+2. **Select Photo Folder** - Click "Select Folder..." button
+3. **Choose Processing Mode** (Auto recommended)
+4. Click **"Start Geotagging"**
+
+### 3️⃣ Advanced Settings (Optional)
+- **Timezone Offset**: Set if camera uses local time
+- **Interpolation Time**: Max time between GPS points (default 30 min)
+- **Extrapolation Time**: Max time outside GPS track (default 5 hours)
+
+## 🛠️ Command Line Interface (CLI)
+
+You can also use the Python script directly:
+
+```bash
+# Basic usage (Auto mode)
+python3 geotag.py --gpx track.gpx --target-dir /path/to/photos
+
+# Sidecar mode (creates XMP files)
+python3 geotag.py --gpx track.gpx --target-dir /path/to/photos --mode sidecar
+
+# Set timezone (Korea time)
+python3 geotag.py --gpx track.gpx --target-dir /path/to/photos --tz-offset +09:00
+
+# Advanced options
+python3 geotag.py --gpx track.gpx \
+                  --target-dir /path/to/photos \
+                  --mode auto \
+                  --tz-offset +09:00 \
+                  --max-int 1800 \
+                  --max-ext 18000
+```
+
+## 💡 Use Cases
+
+### 📷 Travel Photography
+```
+Problem: Thousands of photos from 2-week Europe trip
+Solution: Use daily GPX files to add accurate locations to all photos
+Result: Auto-generated map-based albums in Google Photos
+```
+
+### 🏔️ Hiking & Trekking
+```
+Problem: Need exact locations for landscape photos during hikes
+Solution: Use GPX tracks from Strava or AllTrails
+Result: Record exact shooting points with elevation data
+```
+
+### 🎨 Professional Photography
+```
+Problem: Managing Hasselblad medium format camera RAW files
+Solution: Safely add locations to 3FR files with XMP sidecars
+Result: Location-based catalog in Lightroom
+```
+
+---
+
+## 한국어
+
 ## ✨ 주요 기능
 
 ### 🎯 **스마트 Auto 모드**
-파일 형식에 따라 최적의 처리 방식을 자동으로 선택합니다.
-- **3FR, FFF** (Hasselblad) → XMP 사이드카 생성
+파일 형식에 따라 최적의 처리 방식을 자동으로 선택합니다:
+- **3FR, FFF** (Hasselblad) → XMP 사이드카 파일 생성
 - **JPEG, HEIC** → 메타데이터 직접 임베드
 - **40+ RAW 포맷** 완벽 지원
 
 ### 🌍 **GPX 시간대 자동 감지**
 - GPX 파일의 시간대 정보 자동 인식
 - 카메라 현지 시간과 GPS UTC 시간 자동 보정
-- 한국(+09:00), 중국(+08:00) 등 주요 시간대 지원
+- 주요 시간대 지원 (한국 +09:00, 중국 +08:00 등)
 
 ### 📐 **정밀한 위치 추정**
 - **보간(Interpolation)**: GPS 포인트 사이 위치를 정확하게 계산
@@ -35,7 +184,7 @@
 - SwiftUI 기반의 모던한 디자인
 - 다크모드 완벽 지원
 - 실시간 진행률 표시
-- 한글 완벽 지원
+- 완벽한 국제화 지원
 
 ## 📸 지원 포맷
 
@@ -61,19 +210,19 @@
 - [ExifTool](https://exiftool.org) 설치 필요
 
 ```bash
-# ExifTool 설치 (Homebrew)
+# Homebrew로 ExifTool 설치
 brew install exiftool
 ```
 
 ### 다운로드 및 실행
 
 1. **최신 릴리즈 다운로드**
-   - [Releases](https://github.com/yourusername/PhotoPin/releases) 페이지에서 `PhotoPin.app.zip` 다운로드
+   - [Releases](https://github.com/munggo/PhotoPin/releases)에서 `PhotoPin.app.zip` 다운로드
    - 압축 해제 후 Applications 폴더로 이동
 
 2. **또는 소스에서 빌드**
    ```bash
-   git clone https://github.com/yourusername/PhotoPin.git
+   git clone https://github.com/munggo/PhotoPin.git
    cd PhotoPin
    
    # Swift 앱 빌드
@@ -107,7 +256,7 @@ GPS 트랙을 기록할 수 있는 다양한 방법:
 - **보간 시간**: GPS 포인트 사이 최대 시간 (기본 30분)
 - **외삽 시간**: GPS 트랙 밖 최대 시간 (기본 5시간)
 
-## 🛠️ 명령줄 도구 (CLI)
+## 🛠️ 명령줄 인터페이스 (CLI)
 
 Python 스크립트를 직접 사용할 수도 있습니다:
 
@@ -153,25 +302,27 @@ python3 geotag.py --gpx track.gpx \
 결과: Lightroom에서 위치 기반 카탈로그 구성
 ```
 
-## 📁 프로젝트 구조
+---
+
+## 📁 Project Structure
 
 ```
 PhotoPin/
-├── README.md                 # 이 문서
-├── LICENSE                   # MIT 라이선스
-├── geotag.py                # 핵심 지오태깅 엔진
-├── GeoTagger/               # Swift/SwiftUI macOS 앱
-│   ├── Package.swift        # Swift 패키지 정의
+├── README.md                 # This document
+├── LICENSE                   # MIT License
+├── geotag.py                # Core geotagging engine
+├── GeoTagger/               # Swift/SwiftUI macOS app
+│   ├── Package.swift        # Swift package definition
 │   └── Sources/
-│       └── GeoTaggerApp.swift  # 메인 앱 코드
-├── create_app_bundle.sh     # 앱 번들 생성 스크립트
-└── dist/                    # 빌드된 앱
-    └── GeoTagger.app       # 실행 가능한 macOS 앱
+│       └── GeoTaggerApp.swift  # Main app code
+├── create_app_bundle.sh     # App bundle creation script
+└── dist/                    # Built app
+    └── GeoTagger.app       # Executable macOS app
 ```
 
-## 🤝 기여하기
+## 🤝 Contributing
 
-PhotoPin 프로젝트에 기여를 환영합니다!
+Contributions to PhotoPin are welcome!
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
@@ -179,19 +330,19 @@ PhotoPin 프로젝트에 기여를 환영합니다!
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📜 라이선스
+## 📜 License
 
-MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+MIT License - See [LICENSE](LICENSE) file for details.
 
-## 🙏 감사의 말
+## 🙏 Acknowledgments
 
-- [ExifTool](https://exiftool.org) - Phil Harvey의 강력한 메타데이터 도구
-- [Swift](https://swift.org) - Apple의 모던 프로그래밍 언어
-- [SwiftUI](https://developer.apple.com/xcode/swiftui/) - 선언형 UI 프레임워크
+- [ExifTool](https://exiftool.org) - Powerful metadata tool by Phil Harvey
+- [Swift](https://swift.org) - Modern programming language by Apple
+- [SwiftUI](https://developer.apple.com/xcode/swiftui/) - Declarative UI framework
 
-## 📮 연락처
+## 📮 Contact
 
-질문이나 제안사항이 있으시면 [Issues](https://github.com/yourusername/PhotoPin/issues) 페이지에 남겨주세요.
+For questions or suggestions, please open an issue on [Issues](https://github.com/munggo/PhotoPin/issues) page.
 
 ---
 
