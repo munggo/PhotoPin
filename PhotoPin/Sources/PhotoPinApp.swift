@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 import Combine
 
 @main
-struct GeoTaggerApp: App {
+struct PhotoPinApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -14,10 +14,10 @@ struct GeoTaggerApp: App {
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("GeoTagger 정보") {
+                Button("PhotoPin 정보") {
                     NSApplication.shared.orderFrontStandardAboutPanel(
                         options: [
-                            .applicationName: "GeoTagger",
+                            .applicationName: "PhotoPin",
                             .applicationVersion: "1.0.0"
                         ]
                     )
@@ -50,9 +50,9 @@ class GeoTagViewModel: ObservableObject {
         
         var description: String {
             switch self {
-            case .auto: return "스마트 처리"
-            case .sidecar: return "XMP 사이드카"
-            case .embed: return "직접 임베드"
+            case .auto: return "자동 (RAW→XMP, 이미지→Embed)"
+            case .sidecar: return "XMP 사이드카 (모든 파일)"
+            case .embed: return "직접 임베드 (원본 수정)"
             }
         }
         
@@ -66,7 +66,7 @@ class GeoTagViewModel: ObservableObject {
     }
     
     private var cancellables = Set<AnyCancellable>()
-    private var processTask: Process?
+    private var activeTasks: [Process] = []
     
     var canStartProcessing: Bool {
         gpxFile != nil && targetFolder != nil && !isProcessing
@@ -173,21 +173,115 @@ class GeoTagViewModel: ObservableObject {
     private func countPhotos() {
         guard let folder = targetFolder else { return }
         
-        let extensions = ["jpg", "jpeg", "heic", "heif", "png", "tiff", "tif",
-                         "3fr", "fff", "dng", "arw", "cr2", "cr3", "nef", "raf"]
+        let allExtensions = rawExtensions.union(imageExtensions)
         
         var count = 0
+        var rawCount = 0
+        var imageCount = 0
+        
         if let enumerator = FileManager.default.enumerator(at: folder,
                                                            includingPropertiesForKeys: nil) {
             for case let fileURL as URL in enumerator {
-                if extensions.contains(fileURL.pathExtension.lowercased()) {
+                let ext = fileURL.pathExtension.lowercased()
+                if allExtensions.contains(ext) {
                     count += 1
+                    if rawExtensions.contains(ext) {
+                        rawCount += 1
+                    } else if imageExtensions.contains(ext) {
+                        imageCount += 1
+                    }
                 }
             }
         }
         
         photoCount = count
+        
+        // 파일 형식별 개수 로그
+        if count > 0 {
+            var details = "📊 파일 분석: 총 \(count)개"
+            if rawCount > 0 {
+                details += " (RAW: \(rawCount)개"
+            }
+            if imageCount > 0 {
+                if rawCount > 0 {
+                    details += ", 이미지: \(imageCount)개)"
+                } else {
+                    details += " (이미지: \(imageCount)개)"
+                }
+            } else if rawCount > 0 {
+                details += ")"
+            }
+            addLog(details)
+        }
     }
+    
+    private func findExiftoolPath() -> String {
+        // 먼저 PATH에서 찾기
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["exiftool"]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                addLog("exiftool 경로: \(path)")
+                return path
+            }
+        } catch {
+            addLog("which 명령 실행 실패: \(error.localizedDescription)")
+        }
+        
+        // homebrew 설치 경로 직접 확인
+        let possiblePaths = [
+            "/opt/homebrew/bin/exiftool",     // Apple Silicon
+            "/usr/local/bin/exiftool",        // Intel Mac
+            "/usr/bin/exiftool"               // System
+        ]
+        
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                addLog("exiftool 경로 (직접 확인): \(path)")
+                return path
+            }
+        }
+        
+        addLog("❌ exiftool을 찾을 수 없습니다")
+        return ""
+    }
+    
+    // RAW 파일 확장자 정의 (Lightroom 호환을 위해 XMP 사이드카 필요)
+    private let rawExtensions = Set([
+        "3fr", "fff",  // Hasselblad
+        "dng",         // Adobe DNG
+        "arw", "sr2", "srf",  // Sony
+        "cr2", "cr3", "crw",  // Canon
+        "nef", "nrw",  // Nikon
+        "raf",         // Fujifilm
+        "orf",         // Olympus
+        "rw2",         // Panasonic
+        "pef", "ptx",  // Pentax
+        "srw",         // Samsung
+        "x3f",         // Sigma
+        "iiq",         // Phase One
+        "rwl", "raw",  // Leica
+        "gpr",         // GoPro
+        "ari",         // ARRI
+        "bay", "cap", "erf", "k25", "kdc", "mef", "mos", "mrw", "pxn"  // 기타
+    ])
+    
+    // 일반 이미지 확장자 (직접 embed 가능)
+    private let imageExtensions = Set([
+        "jpg", "jpeg", "png", "gif", "bmp", "webp",
+        "heic", "heif", "avif", "jxl",
+        "tiff", "tif"  // TIFF는 embed 가능
+    ])
     
     func startGeotagging() {
         guard let gpx = gpxFile,
@@ -197,23 +291,139 @@ class GeoTagViewModel: ObservableObject {
         progress = 0
         statusMessage = "처리 중..."
         
-        // Python script path / Python 스크립트 경로
-        let scriptPath = Bundle.main.resourcePath?.appending("/geotag.py") 
-            ?? FileManager.default.currentDirectoryPath.appending("/geotag.py")
+        // exiftool 경로 찾기 (homebrew 설치 경로 포함)
+        let exiftoolPath = findExiftoolPath()
         
-        // Process configuration / Process 설정
+        guard !exiftoolPath.isEmpty else {
+            isProcessing = false
+            statusMessage = "exiftool 없음"
+            showError("exiftool이 설치되지 않았습니다. 터미널에서 'brew install exiftool'을 실행하세요.")
+            return
+        }
+        
+        // Auto 모드에서 파일 형식별로 처리
+        if processingMode == .auto {
+            processAutoMode(exiftoolPath: exiftoolPath, gpx: gpx, folder: folder)
+        } else {
+            // 단일 모드 처리
+            processSingleMode(exiftoolPath: exiftoolPath, gpx: gpx, folder: folder)
+        }
+    }
+    
+    private func processAutoMode(exiftoolPath: String, gpx: URL, folder: URL) {
+        addLog("🔄 Auto 모드: 파일 형식에 따라 자동 처리")
+        
+        // RAW 파일용 프로세스 (XMP 사이드카)
+        let rawTask = createExiftoolProcess(
+            exiftoolPath: exiftoolPath,
+            gpx: gpx,
+            folder: folder,
+            extensions: Array(rawExtensions),
+            useXMP: true
+        )
+        
+        // 일반 이미지용 프로세스 (직접 embed)
+        let imageTask = createExiftoolProcess(
+            exiftoolPath: exiftoolPath,
+            gpx: gpx,
+            folder: folder,
+            extensions: Array(imageExtensions),
+            useXMP: false
+        )
+        
+        var completedTasks = 0
+        let totalTasks = 2
+        
+        // RAW 파일 처리
+        addLog("📄 RAW 파일 처리 중 (XMP 사이드카 생성)...")
+        runExiftoolTask(rawTask) { [weak self] success in
+            completedTasks += 1
+            if success {
+                self?.addLog("✅ RAW 파일 처리 완료")
+            }
+            if completedTasks == totalTasks {
+                self?.finishProcessing(success: true)
+            }
+        }
+        
+        // 일반 이미지 처리
+        addLog("📝 일반 이미지 처리 중 (메타데이터 직접 삽입)...")
+        runExiftoolTask(imageTask) { [weak self] success in
+            completedTasks += 1
+            if success {
+                self?.addLog("✅ 일반 이미지 처리 완료")
+            }
+            if completedTasks == totalTasks {
+                self?.finishProcessing(success: true)
+            }
+        }
+    }
+    
+    private func processSingleMode(exiftoolPath: String, gpx: URL, folder: URL) {
+        let allExtensions = Array(rawExtensions.union(imageExtensions))
+        let useXMP = (processingMode == .sidecar)
+        
+        let task = createExiftoolProcess(
+            exiftoolPath: exiftoolPath,
+            gpx: gpx,
+            folder: folder,
+            extensions: allExtensions,
+            useXMP: useXMP
+        )
+        
+        let modeDesc = useXMP ? "XMP 사이드카 모드" : "직접 embed 모드"
+        addLog("📍 \(modeDesc)로 처리 중...")
+        
+        runExiftoolTask(task) { [weak self] success in
+            self?.finishProcessing(success: success)
+        }
+    }
+    
+    private func createExiftoolProcess(
+        exiftoolPath: String,
+        gpx: URL,
+        folder: URL,
+        extensions: [String],
+        useXMP: Bool
+    ) -> Process {
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        task.arguments = [
-            scriptPath,
-            "--gpx", gpx.path,
-            "--target-dir", folder.path,
-            "--mode", processingMode.rawValue.lowercased(),
-            "--tz-offset", timezoneOffset,
-            "--max-int", String(maxInterpolation),
-            "--max-ext", String(maxExtrapolation)
+        task.executableURL = URL(fileURLWithPath: exiftoolPath)
+        
+        // exiftool 인자 구성
+        var arguments = [
+            "-r",  // 재귀적으로 하위 폴더 처리
+            "-geotag=\(gpx.path)",
+            "-api", "GeoMaxIntSecs=\(maxInterpolation)",
+            "-api", "GeoMaxExtSecs=\(maxExtrapolation)"
         ]
         
+        // 타임존 오프셋 설정
+        if !timezoneOffset.isEmpty && timezoneOffset != "+00:00" {
+            arguments.append("-geotime<${DateTimeOriginal}\(timezoneOffset)")
+        }
+        
+        // XMP 사이드카 또는 직접 embed
+        if useXMP {
+            arguments.append("-o")
+            arguments.append("%d%f.xmp")
+        } else {
+            arguments.append("-overwrite_original_in_place")
+        }
+        
+        // 파일 확장자 필터
+        for ext in extensions {
+            arguments.append("-ext")
+            arguments.append(ext)
+        }
+        
+        // 대상 폴더 추가
+        arguments.append(folder.path)
+        
+        task.arguments = arguments
+        return task
+    }
+    
+    private func runExiftoolTask(_ task: Process, completion: @escaping (Bool) -> Void) {
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = pipe
@@ -230,27 +440,39 @@ class GeoTagViewModel: ObservableObject {
         
         task.terminationHandler = { process in
             DispatchQueue.main.async {
-                self.isProcessing = false
-                if process.terminationStatus == 0 {
-                    self.progress = 1.0
-                    self.statusMessage = "완료"
-                    self.addLog("✅ 지오태깅이 성공적으로 완료되었습니다!")
-                } else {
-                    self.statusMessage = "오류 발생"
-                    self.showError("처리 중 오류가 발생했습니다 (코드: \(process.terminationStatus))")
+                // Remove from active tasks
+                if let index = self.activeTasks.firstIndex(of: process) {
+                    self.activeTasks.remove(at: index)
+                }
+                
+                let success = process.terminationStatus == 0
+                if !success {
+                    self.addLog("⚠️ 처리 중 오류 발생 (코드: \(process.terminationStatus))")
                 }
                 outputHandle.readabilityHandler = nil
+                completion(success)
             }
         }
         
         do {
+            activeTasks.append(task)  // Add to active tasks
             try task.run()
-            processTask = task
-            addLog("지오태깅 시작: \(folder.lastPathComponent)")
         } catch {
-            isProcessing = false
-            statusMessage = "실행 실패"
-            showError("프로세스 실행 실패: \(error.localizedDescription)")
+            addLog("❌ 프로세스 실행 실패: \(error.localizedDescription)")
+            completion(false)
+        }
+    }
+    
+    private func finishProcessing(success: Bool) {
+        isProcessing = false
+        if success {
+            progress = 1.0
+            statusMessage = "완료"
+            addLog("✅ 모든 파일 처리가 완료되었습니다!")
+            addLog("💡 Lightroom에서 RAW 파일과 XMP를 함께 가져오면 위치 정보가 자동으로 적용됩니다.")
+        } else {
+            statusMessage = "오류 발생"
+            showError("일부 파일 처리 중 오류가 발생했습니다. 로그를 확인하세요.")
         }
     }
     
@@ -276,7 +498,11 @@ class GeoTagViewModel: ObservableObject {
     }
     
     func stopProcessing() {
-        processTask?.terminate()
+        // Terminate all active tasks
+        for task in activeTasks {
+            task.terminate()
+        }
+        activeTasks.removeAll()
         isProcessing = false
         statusMessage = "취소됨"
         addLog("사용자가 처리를 취소했습니다")
@@ -416,7 +642,7 @@ struct HeaderView: View {
                     endPoint: .bottomTrailing
                 ))
             
-            Text("GeoTagger")
+            Text("PhotoPin")
                 .font(.largeTitle)
                 .fontWeight(.bold)
             

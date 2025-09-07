@@ -1,0 +1,21 @@
+// PhotoPin Build Configuration
+// Hotspot Configuration 및 Network Extensions 설정
+
+// Entitlements
+CODE_SIGN_ENTITLEMENTS = PhotoPin/PhotoPin.entitlements
+
+// Required Device Capabilities
+TARGETED_DEVICE_FAMILY = 1
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
+
+// Network Configuration
+ENABLE_HOTSPOT_CONFIGURATION = YES
+ENABLE_NETWORK_EXTENSIONS = YES
+
+// Build Settings
+SWIFT_VERSION = 5.0
+ENABLE_BITCODE = NO
+
+// 권한 설정
+PRODUCT_BUNDLE_IDENTIFIER = com.photopin.mobile
+DEVELOPMENT_TEAM = $(DEVELOPMENT_TEAM)

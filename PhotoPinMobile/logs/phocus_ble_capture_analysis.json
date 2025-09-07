@@ -1,0 +1,9 @@
+{
+  "services": [
+    "FFF0",
+    "FFFf"
+  ],
+  "characteristics": {},
+  "write_sequence": [],
+  "commands": []
+}

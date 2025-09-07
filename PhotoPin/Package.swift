@@ -2,22 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "GeoTagger",
+    name: "PhotoPin",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "GeoTagger", targets: ["GeoTagger"])
+        .executable(name: "PhotoPin", targets: ["PhotoPin"])
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "GeoTagger",
+            name: "PhotoPin",
             dependencies: [],
-            path: "Sources",
-            resources: [
-                .copy("geotag.py")
-            ]
+            path: "Sources"
         )
     ]
 )

@@ -35,8 +35,19 @@ SIDECAR_ONLY_EXTS = [
 ]
 
 def build_cmd(args, file_ext=None):
+    # Check exiftool path (including homebrew installation) / exiftool 경로 확인 (homebrew 설치 경로 포함)
+    exiftool_path = shutil.which("exiftool")
+    if not exiftool_path:
+        # Check direct paths for macOS homebrew installation / macOS에서 homebrew로 설치한 경우 직접 경로 확인
+        if os.path.exists("/opt/homebrew/bin/exiftool"):
+            exiftool_path = "/opt/homebrew/bin/exiftool"
+        elif os.path.exists("/usr/local/bin/exiftool"):
+            exiftool_path = "/usr/local/bin/exiftool"
+        else:
+            exiftool_path = "exiftool"  # Try default / 기본값으로 시도
+    
     # Common options / 공통 옵션
-    cmd = ["exiftool",
+    cmd = [exiftool_path,
            "-r",  # Recursive subdirectories / 하위폴더까지 재귀
            f"-geotag={args.gpx}",
            "-api", f"GeoMaxIntSecs={args.max_int}",   # Max interpolation time between GPS points (seconds) / GPX 포인트 간 보간 허용 시간(초)
@@ -88,7 +99,16 @@ def main():
     p.add_argument("--exts", nargs="*", help="File extensions to process (defaults include RAW & common formats)")
     args = p.parse_args()
 
-    if not shutil.which("exiftool"):
+    # Check exiftool existence (including homebrew paths) / exiftool 존재 여부 확인 (homebrew 경로 포함)
+    exiftool_found = False
+    if shutil.which("exiftool"):
+        exiftool_found = True
+    elif os.path.exists("/opt/homebrew/bin/exiftool"):
+        exiftool_found = True
+    elif os.path.exists("/usr/local/bin/exiftool"):
+        exiftool_found = True
+    
+    if not exiftool_found:
         print("ERROR: exiftool not found. Install it first (e.g., brew install exiftool).", file=sys.stderr)
         sys.exit(1)
     if not os.path.isfile(args.gpx):

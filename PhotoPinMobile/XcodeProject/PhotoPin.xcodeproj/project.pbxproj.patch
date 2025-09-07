@@ -1,0 +1,16 @@
+# Xcode 프로젝트 설정 추가 사항
+
+## Capabilities 추가 필요:
+1. Hotspot Configuration
+2. Network Extensions
+3. Wireless Accessory Configuration
+
+## Build Settings:
+- CODE_SIGN_ENTITLEMENTS = PhotoPin/PhotoPin.entitlements
+
+## Info.plist 추가 권한:
+- NSLocalNetworkUsageDescription
+- UIRequiresPersistentWiFi
+- com.apple.developer.networking.HotspotConfiguration
+
+이 설정들은 Xcode에서 수동으로 추가해야 합니다.
