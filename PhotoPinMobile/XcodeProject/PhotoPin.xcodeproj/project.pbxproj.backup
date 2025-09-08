@@ -13,7 +13,6 @@
 		2D2D2D2D2D2D2D2D2D2D2D2D /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D2D2D2D2D2D2D2D2D2D2D2C /* CameraManager.swift */; };
 		2D2D2D2D2D2D2D2D2D2D2D2F /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D2D2D2D2D2D2D2D2D2D2D2E /* LocationManager.swift */; };
 		3D3D3D3D3D3D3D3D3D3D3D3D /* BluetoothCameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D3D3D3D3D3D3D3D3D3D3D3C /* BluetoothCameraManager.swift */; };
-		4D4D4D4D4D4D4D4D4D4D4D4D /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4D4D4D4D4D4D4D4D4D4D4E /* LocationService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,7 +25,6 @@
 		2D2D2D2D2D2D2D2D2D2D2D2C /* CameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
 		2D2D2D2D2D2D2D2D2D2D2D2E /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		3D3D3D3D3D3D3D3D3D3D3D3C /* BluetoothCameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothCameraManager.swift; sourceTree = "<group>"; };
-		4D4D4D4D4D4D4D4D4D4D4D4E /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,7 +63,6 @@
 				2D2D2D2D2D2D2D2D2D2D2D2C /* CameraManager.swift */,
 				3D3D3D3D3D3D3D3D3D3D3D3C /* BluetoothCameraManager.swift */,
 				2D2D2D2D2D2D2D2D2D2D2D2E /* LocationManager.swift */,
-				4D4D4D4D4D4D4D4D4D4D4D4E /* LocationService.swift */,
 				1D1D1D1D1D1D1D1D1D1D1D20 /* Assets.xcassets */,
 				1D1D1D1D1D1D1D1D1D1D1D25 /* Info.plist */,
 			);
@@ -157,7 +154,6 @@
 				2D2D2D2D2D2D2D2D2D2D2D2D /* CameraManager.swift in Sources */,
 				3D3D3D3D3D3D3D3D3D3D3D3D /* BluetoothCameraManager.swift in Sources */,
 				2D2D2D2D2D2D2D2D2D2D2D2F /* LocationManager.swift in Sources */,
-				4D4D4D4D4D4D4D4D4D4D4D4D /* LocationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

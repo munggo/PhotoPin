@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var bluetoothManager = BluetoothCameraManager()
     @StateObject private var locationManager = LocationManager()
+    @StateObject private var locationService = LocationService()
     @State private var showAlert = false
     @State private var alertMessage = ""
     @State private var selectedTab = 0
@@ -340,6 +341,30 @@ struct ContentView: View {
                     .background(Color.gray.opacity(0.1))
                     .cornerRadius(8)
                 
+                // 위치 전송 상태
+                if locationService.isTransmitting {
+                    VStack(spacing: 10) {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("카메라로 전송 중")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                        
+                        Text("연결: \(locationService.connectionType)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        Text(locationService.transmissionStatus)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                
                 if locationManager.authorizationStatus == .notDetermined {
                     Button(action: {
                         locationManager.requestPermission()
@@ -352,21 +377,51 @@ struct ContentView: View {
                             .cornerRadius(10)
                     }
                 } else {
-                    Button(action: {
-                        if locationManager.isTracking {
-                            locationManager.stopTracking()
-                        } else {
-                            locationManager.startTracking()
+                    VStack(spacing: 15) {
+                        Button(action: {
+                            if locationManager.isTracking {
+                                locationManager.stopTracking()
+                            } else {
+                                locationManager.startTracking()
+                            }
+                        }) {
+                            Text(locationManager.isTracking ? "GPS 중지" : "GPS 시작")
+                                .padding()
+                                .frame(width: 200)
+                                .background(locationManager.isTracking ? Color.red : Color.green)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
                         }
-                    }) {
-                        Text(locationManager.isTracking ? "중지" : "시작")
-                            .padding()
-                            .frame(width: 200)
-                            .background(locationManager.isTracking ? Color.red : Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
+                        
+                        // 카메라로 위치 전송 버튼
+                        Button(action: {
+                            if locationService.isTransmitting {
+                                locationService.stopTransmitting()
+                            } else {
+                                // WiFi 연결 상태 확인
+                                if bluetoothManager.isWiFiConnected || cameraManager.isConnected {
+                                    locationService.startTransmitting()
+                                } else {
+                                    alertMessage = "먼저 카메라 WiFi에 연결하세요"
+                                    showAlert = true
+                                }
+                            }
+                        }) {
+                            Text(locationService.isTransmitting ? "전송 중지" : "카메라로 전송")
+                                .padding()
+                                .frame(width: 200)
+                                .background(locationService.isTransmitting ? Color.orange : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .disabled(!locationManager.isTracking)
                     }
                 }
+            }
+            .alert("알림", isPresented: $showAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
             }
             .tabItem {
                 Label("GPS", systemImage: "location.fill")

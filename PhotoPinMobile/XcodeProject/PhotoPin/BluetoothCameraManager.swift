@@ -716,11 +716,15 @@ extension BluetoothCameraManager: CBPeripheralDelegate {
                     }
                     
                 case "FFF7":
-                    // 알림 특성
+                    // 알림 특성 - 먼저 활성화
                     print("🔔 알림 특성 발견")
                     self.notifyCharacteristic = characteristic
                     if characteristic.properties.contains(.notify) {
+                        print("🔔 FFF7 notify 활성화")
                         peripheral.setNotifyValue(true, for: characteristic)
+                    }
+                    if characteristic.properties.contains(.read) {
+                        peripheral.readValue(for: characteristic)
                     }
                     
                 default:
@@ -770,10 +774,18 @@ extension BluetoothCameraManager: CBPeripheralDelegate {
                             self.cameraInfo = "Wi-Fi 켜짐 - AP 모드 전환 필요"
                         }
                         
-                        // AP 모드로 전환 시도
+                        // AP 모드로 전환 시도 (writeWithoutResponse 사용)
                         print("🔄 AP 모드로 전환 시도...")
                         let apModeCommand = Data([0x04, 0x01, 0x00])  // AP_MODE_ON
-                        peripheral.writeValue(apModeCommand, for: characteristic, type: .withResponse)
+                        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+                        peripheral.writeValue(apModeCommand, for: characteristic, type: writeType)
+                        
+                        // writeWithoutResponse인 경우 직접 상태 확인
+                        if writeType == .withoutResponse {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                peripheral.readValue(for: characteristic)
+                            }
+                        }
                         
                         // AP 모드 전환 후 추가 설정
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -843,13 +855,23 @@ extension BluetoothCameraManager: CBPeripheralDelegate {
                     
                 case "FFF7":
                     // 알림 데이터
-                    print("🔔 알림: \(data.hexEncodedString())")
+                    print("🔔 FFF7 알림: \(data.hexEncodedString())")
+                    addDebugLog("FFF7 notify: \(data.hexEncodedString())")
                     
                     // 알림 코드 분석
                     if data.first == 0x01 {
                         print("📢 Wi-Fi 준비 완료 알림")
                         DispatchQueue.main.async {
                             self.cameraInfo = "카메라 Wi-Fi 준비됨"
+                        }
+                        // WiFi 스캔 시작
+                        self.scanForWiFiNetwork()
+                    } else if data == Data([0x04, 0x01, 0x00]) {
+                        print("📡 AP 모드 활성화 알림!")
+                        self.addDebugLog("✅ AP 모드 활성화 알림")
+                        // WiFi 스캔 시작
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            self.scanForWiFiNetwork()
                         }
                     }
                     
@@ -912,39 +934,66 @@ extension BluetoothCameraManager: CBPeripheralDelegate {
     private func scanForWiFiNetwork() {
         addDebugLog("📡 카메라 WiFi 네트워크 검색 중...")
         
-        // 정확한 SSID - 카메라 이름과 동일!
+        // 카메라 이름 기반 SSID 패턴
         let cameraName = connectedPeripheral?.name ?? "X2D II 100C 003635"
         
-        // 가능한 SSID 패턴들 (첫 번째가 가장 가능성 높음)
+        // 가능한 SSID 패턴들 - 공백과 형식 유지 중요!
         let possibleSSIDs = [
-            cameraName,  // 연결된 카메라 이름 사용
-            "X2D II 100C 003635",  // 확인된 정확한 SSID
-            "X2D-II",
+            cameraName,  // 정확한 카메라 이름
+            "X2D II 100C 003635",  // 확인된 SSID
+            "X2D-II-100C-003635",  // 대시 버전
+            "X2D_II_100C_003635",  // 언더스코어 버전
             "X2D",
-            "Hasselblad",
-            "Hasselblad-X2D"
+            "Hasselblad"
         ]
         
-        addDebugLog("🔍 검색할 SSID: \(possibleSSIDs.first ?? "")")
+        addDebugLog("🔍 검색할 SSID: \(cameraName)")
         
-        // NEHotspotConfiguration으로 연결 시도
-        for ssid in possibleSSIDs {
-            let configuration = NEHotspotConfiguration(ssid: ssid)
-            configuration.joinOnce = false
-            
-            NEHotspotConfigurationManager.shared.apply(configuration) { [weak self] error in
-                if let error = error {
-                    self?.addDebugLog("❌ \(ssid) 연결 실패: \(error.localizedDescription)")
-                } else {
-                    self?.addDebugLog("✅ WiFi 연결 성공: \(ssid)")
-                    DispatchQueue.main.async {
-                        self?.currentSSID = ssid
-                        self?.cameraInfo = "WiFi 연결됨: \(ssid)"
-                        // TCP 연결 시작 (기존 가능한 IP들로 시도)
-                        self?.tryConnection(hosts: ["192.168.2.1", "192.168.1.1", "192.168.0.1"], index: 0)
+        // WiFi 자동 감지 로직
+        detectAndConnectWiFi(possibleSSIDs: possibleSSIDs)
+    }
+    
+    // WiFi 자동 감지 및 연결
+    private func detectAndConnectWiFi(possibleSSIDs: [String]) {
+        // NEHotspotConfiguration으로 각 SSID 시도
+        var successFound = false
+        
+        for (index, ssid) in possibleSSIDs.enumerated() {
+            // 딜레이를 두고 순차적으로 시도
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.5) { [weak self] in
+                guard !successFound else { return }
+                
+                let configuration = NEHotspotConfiguration(ssid: ssid)
+                configuration.joinOnce = false
+                
+                NEHotspotConfigurationManager.shared.apply(configuration) { error in
+                    if error == nil {
+                        successFound = true
+                        self?.addDebugLog("✅ WiFi 발견 및 연결: \(ssid)")
+                        DispatchQueue.main.async {
+                            self?.currentSSID = ssid
+                            self?.cameraInfo = "WiFi 연결됨: \(ssid)"
+                            // 즉시 TCP 연결 시도
+                            self?.tryConnection(hosts: ["192.168.2.1", "192.168.1.1", "192.168.0.1"], index: 0)
+                        }
+                    } else if error?.localizedDescription.contains("already associated") == true {
+                        // 이미 연결되어 있음
+                        successFound = true
+                        self?.addDebugLog("ℹ️ 이미 연결됨: \(ssid)")
+                        DispatchQueue.main.async {
+                            self?.currentSSID = ssid
+                            self?.cameraInfo = "WiFi 이미 연결됨: \(ssid)"
+                            self?.tryConnection(hosts: ["192.168.2.1", "192.168.1.1", "192.168.0.1"], index: 0)
+                        }
                     }
-                    return
                 }
+            }
+        }
+        
+        // 모든 시도 후에도 실패하면 수동 확인 안내
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(possibleSSIDs.count) * 0.5 + 2.0) { [weak self] in
+            if !successFound {
+                self?.checkWiFiStatus()
             }
         }
     }
@@ -1037,6 +1086,9 @@ extension BluetoothCameraManager {
         print("\n🔧 FFF3 리셋 시작")
         addDebugLog("🔧 FFF3 리셋 시작")
         
+        // writeWithoutResponse 사용
+        let writeType: CBCharacteristicWriteType = wifiChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        
         // 리셋 명령들 시도
         let resetCommands: [(String, Data)] = [
             ("Clear", Data([0x00, 0x00, 0x00])),
@@ -1048,7 +1100,7 @@ extension BluetoothCameraManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.5) {
                 print("🔧 \(name): \(command.hexEncodedString())")
                 self.addDebugLog("리셋 - \(name): \(command.hexEncodedString())")
-                peripheral.writeValue(command, for: wifiChar, type: .withResponse)
+                peripheral.writeValue(command, for: wifiChar, type: writeType)
             }
         }
         
@@ -1063,6 +1115,10 @@ extension BluetoothCameraManager {
     private func sendAPBroadcastCommands(peripheral: CBPeripheral, characteristic: CBCharacteristic) {
         print("\n📻 AP 브로드캐스트 설정 시작")
         addDebugLog("📻 AP 브로드캐스트 설정")
+        
+        // writeWithoutResponse 사용 여부 확인
+        let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        print("🖊 Write Type: \(writeType == .withoutResponse ? "withoutResponse" : "withResponse")")
         
         // AP 모드 활성화 후 필요한 추가 명령들
         let broadcastCommands: [(String, Data)] = [
@@ -1091,7 +1147,7 @@ extension BluetoothCameraManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.3) {
                 print("📻 \(name): \(command.hexEncodedString())")
                 self.addDebugLog("\(name): \(command.hexEncodedString())")
-                peripheral.writeValue(command, for: characteristic, type: .withResponse)
+                peripheral.writeValue(command, for: characteristic, type: writeType)
                 
                 // 각 명령 후 상태 읽기
                 if index == broadcastCommands.count - 1 {
@@ -1132,6 +1188,10 @@ extension BluetoothCameraManager {
         
         print("\n📡 WiFi 활성화 명령 전송 시작")
         addDebugLog("📡 WiFi 활성화 명령 전송")
+        
+        // writeWithoutResponse 사용
+        let writeType: CBCharacteristicWriteType = wifiChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        print("🖊 FFF3 Write Type: \(writeType == .withoutResponse ? "withoutResponse" : "withResponse")")
         
         // 개선된 명령 시퀀스
         let commands: [(String, Data)] = [
@@ -1176,7 +1236,7 @@ extension BluetoothCameraManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.2) {
                 print("📡 \(name): \(command.hexEncodedString())")
                 self.addDebugLog("\(name): \(command.hexEncodedString())")
-                peripheral.writeValue(command, for: wifiChar, type: .withResponse)
+                peripheral.writeValue(command, for: wifiChar, type: writeType)
             }
         }
         

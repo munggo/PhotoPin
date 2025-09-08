@@ -19,6 +19,12 @@ cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
 # Info.plist 복사
 cp Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
+# 아이콘 파일 복사
+if [ -f "AppIcon.icns" ]; then
+    cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
+    echo "✅ 아이콘 파일이 포함되었습니다."
+fi
+
 # 실행 권한 설정
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
