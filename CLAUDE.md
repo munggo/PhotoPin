@@ -3,55 +3,90 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 프로젝트 개요
-GPX 트랙 파일을 사용하여 사진에 지오태그(위치 정보)를 추가하는 Python 스크립트입니다. ExifTool을 백엔드로 사용하며, XMP 사이드카 파일이나 직접 임베드 방식을 지원합니다.
+PhotoPin - GPX 트랙 파일을 사용하여 사진에 지오태그(위치 정보)를 추가하는 macOS 네이티브 앱입니다. SwiftUI로 개발되었으며, ExifTool을 백엔드로 사용합니다.
+
+**중요**: 원본 파일 보호를 위해 항상 XMP 사이드카 파일만 생성합니다.
 
 ## 필수 의존성
-- Python 3.x
-- ExifTool (`brew install exiftool` 또는 시스템 패키지 매니저로 설치)
+- macOS 11.0+
+- Swift 5.5+
+- ExifTool (`brew install exiftool`)
 
-## 주요 명령어
+## 빌드 및 실행
 
-### 실행
+### 개발 모드
 ```bash
-# XMP 사이드카 모드 (기본, 안전)
-python3 geotag.py --gpx track.gpx --target-dir /path/to/photos
-
-# 파일에 직접 임베드 모드
-python3 geotag.py --gpx track.gpx --target-dir /path/to/photos --mode embed
-
-# 타임존 오프셋 지정 (카메라가 현지 시간인 경우)
-python3 geotag.py --gpx track.gpx --target-dir /path/to/photos --tz-offset +09:00
+cd PhotoPin
+swift build
+swift run
 ```
 
-### 검증
+### 앱 빌드
 ```bash
-# 지오태그가 적용된 파일 확인
-exiftool -a -G1 -s <photo_file>
+cd PhotoPin
+swift build -c release
+# 또는 Xcode에서 열기
+open Package.swift
 ```
 
-## 아키텍처 및 구조
+## 주요 특징
 
-### 핵심 컴포넌트
-- **build_cmd()**: ExifTool 명령어를 동적으로 구성
-- **main()**: 인자 파싱, 유효성 검사, 실행
+### XMP 전용 모드
+- **안전성**: 원본 파일을 절대 수정하지 않음
+- **호환성**: Lightroom, Photoshop, Capture One 등 주요 소프트웨어 지원
+- **중복 처리**: 동일한 파일명의 다른 확장자(예: IMG_001.jpg, IMG_001.raw)는 하나의 XMP 파일로 관리
+- **스마트 스킵**: 이미 XMP 파일이 존재하는 경우 자동으로 건너뛰어 재처리 방지
+
+### 지원 파일 형식
+- 일반 이미지: JPG, JPEG, PNG, HEIC, HEIF, TIFF
+- RAW 포맷: DNG, ARW, CR2, CR3, NEF, RAF, ORF, RW2
+- Hasselblad: 3FR, FFF
+- Phase One: IIQ
+- 기타: 대부분의 카메라 RAW 포맷
 
 ### 동작 방식
 1. GPX 파일의 GPS 트랙 데이터와 사진의 DateTimeOriginal 시간을 매칭
 2. 시간상 가장 가까운 GPS 포인트를 찾아 위치 정보 적용
-3. `max_int`(기본 30분) 범위 내에서 GPS 포인트 간 보간
-4. `max_ext`(기본 2분) 범위 내에서 트랙 외부 외삽 허용
+3. 보간/외삽을 통해 정확한 위치 추정
+4. XMP 사이드카 파일에 위치 정보 저장
 
-### 지원 파일 형식
-- 일반 이미지: JPG, JPEG, PNG, HEIC, HEIF
-- RAW 포맷: DNG, ARW, CR2, CR3, NEF, RAF, ORF, RW2, TIF, TIFF
-- Hasselblad: 3FR, FFF
+## 아키텍처
 
-### 모드별 특징
-- **sidecar**: 원본 파일 보존, .xmp 파일에 메타데이터 저장 (모든 포맷 지원)
-- **embed**: 파일에 직접 기록 (일부 RAW 포맷은 제한적)
+### 주요 컴포넌트
+- **PhotoPinApp.swift**: 메인 앱 엔트리 포인트와 UI
+- **GeoTagViewModel**: 비즈니스 로직 및 ExifTool 프로세스 관리
+  - XMP 파일 존재 여부 체크
+  - 처리가 필요한 파일과 스킵할 파일 구분
+  - 실시간 상태 업데이트
+- **ContentView**: 메인 UI 레이아웃
 
-## 개발 시 주의사항
-- ExifTool 설치 여부 확인 필수
-- 파일 경로와 GPX 파일 존재 여부 검증
-- 타임존 처리: GPX는 일반적으로 UTC, 카메라는 현지 시간일 수 있음
-- 대량 파일 처리 시 `-r` 옵션으로 재귀적 처리
+### ExifTool 통합
+- Process API를 통한 ExifTool 실행
+- 실시간 로그 스트리밍
+- 에러 핸들링 및 프로세스 관리
+
+## 개발 가이드
+
+### UI/UX 원칙
+- macOS 네이티브 디자인 가이드라인 준수
+- 직관적이고 간단한 인터페이스
+- 실시간 피드백 제공
+
+### 코드 스타일
+- SwiftUI 베스트 프랙티스 적용
+- MVVM 패턴 사용
+- 한글/영어 이중 주석
+
+### 테스트
+```bash
+# ExifTool 설치 확인
+which exiftool
+
+# XMP 파일 검증
+exiftool -a -G1 -s <photo_file.xmp>
+```
+
+## 주의사항
+- ExifTool 설치 필수
+- GPX 파일 시간대와 카메라 시간대 확인
+- 대량 파일 처리 시 메모리 사용량 모니터링

@@ -31,7 +31,8 @@ struct PhotoPinApp: App {
 class GeoTagViewModel: ObservableObject {
     @Published var gpxFile: URL?
     @Published var targetFolder: URL?
-    @Published var processingMode = ProcessingMode.auto
+    // 항상 XMP 사이드카 모드만 사용 (원본 파일 보호)
+    @Published var processingMode = ProcessingMode.sidecar
     @Published var timezoneOffset = "+09:00"
     @Published var maxInterpolation = 1800
     @Published var maxExtrapolation = 18000
@@ -42,26 +43,17 @@ class GeoTagViewModel: ObservableObject {
     @Published var showingAlert = false
     @Published var alertMessage = ""
     @Published var photoCount = 0
+    @Published var existingXmpCount = 0
     
     enum ProcessingMode: String, CaseIterable {
-        case auto = "Auto"
         case sidecar = "Sidecar"
-        case embed = "Embed"
-        
+
         var description: String {
-            switch self {
-            case .auto: return "자동 (RAW→XMP, 이미지→Embed)"
-            case .sidecar: return "XMP 사이드카 (모든 파일)"
-            case .embed: return "직접 임베드 (원본 수정)"
-            }
+            return "XMP 사이드카 (안전 모드)"
         }
-        
+
         var icon: String {
-            switch self {
-            case .auto: return "wand.and.stars"
-            case .sidecar: return "doc.badge.plus"
-            case .embed: return "square.and.pencil"
-            }
+            return "doc.badge.plus"
         }
     }
     
@@ -172,19 +164,35 @@ class GeoTagViewModel: ObservableObject {
     
     private func countPhotos() {
         guard let folder = targetFolder else { return }
-        
+
         let allExtensions = rawExtensions.union(imageExtensions)
-        
-        var count = 0
+
+        // 유니크한 파일명만 카운트 (동일 파일명의 다른 확장자는 하나의 XMP로 처리)
+        var uniqueBasenames = Set<String>()
+        var existingXmpFiles = Set<String>()
+        var totalFiles = 0
         var rawCount = 0
         var imageCount = 0
-        
+
         if let enumerator = FileManager.default.enumerator(at: folder,
                                                            includingPropertiesForKeys: nil) {
             for case let fileURL as URL in enumerator {
                 let ext = fileURL.pathExtension.lowercased()
+
+                // XMP 파일 체크
+                if ext == "xmp" {
+                    let basePathWithoutXmp = fileURL.deletingPathExtension().path
+                    existingXmpFiles.insert(basePathWithoutXmp)
+                }
+
+                // 사진 파일 체크
                 if allExtensions.contains(ext) {
-                    count += 1
+                    totalFiles += 1
+
+                    // 파일 경로 (확장자 제외) - 전체 경로로 유니크 체크
+                    let fullBasePath = fileURL.deletingPathExtension().path
+                    uniqueBasenames.insert(fullBasePath)
+
                     if rawExtensions.contains(ext) {
                         rawCount += 1
                     } else if imageExtensions.contains(ext) {
@@ -193,25 +201,44 @@ class GeoTagViewModel: ObservableObject {
                 }
             }
         }
-        
-        photoCount = count
+
+        // 이미 XMP가 있는 파일 개수 계산
+        existingXmpCount = uniqueBasenames.intersection(existingXmpFiles).count
+
+        // 처리가 필요한 파일 개수 (전체 - 이미 처리된 것)
+        photoCount = uniqueBasenames.count
         
         // 파일 형식별 개수 로그
-        if count > 0 {
-            var details = "📊 파일 분석: 총 \(count)개"
+        if photoCount > 0 {
+            var details = "📊 파일 분석: 총 \(totalFiles)개 파일"
+
+            // 유니크한 파일명 기준
+            details += " → \(photoCount)개 그룹"
+
+            // 이미 처리된 파일이 있는 경우
+            if existingXmpCount > 0 {
+                let needProcessing = photoCount - existingXmpCount
+                details += " (\(existingXmpCount)개 이미 처리됨, \(needProcessing)개 신규)"
+            }
+
             if rawCount > 0 {
-                details += " (RAW: \(rawCount)개"
+                details += " [RAW: \(rawCount)개"
             }
             if imageCount > 0 {
                 if rawCount > 0 {
-                    details += ", 이미지: \(imageCount)개)"
+                    details += ", 이미지: \(imageCount)개]"
                 } else {
-                    details += " (이미지: \(imageCount)개)"
+                    details += " [이미지: \(imageCount)개]"
                 }
             } else if rawCount > 0 {
-                details += ")"
+                details += "]"
             }
             addLog(details)
+
+            if existingXmpCount > 0 {
+                addLog("⚠️ 이미 XMP 파일이 있는 \(existingXmpCount)개 항목은 스킵됩니다")
+            }
+            addLog("ℹ️ 동일한 파일명의 다른 확장자는 하나의 XMP로 관리됩니다")
         }
     }
     
@@ -301,68 +328,17 @@ class GeoTagViewModel: ObservableObject {
             return
         }
         
-        // Auto 모드에서 파일 형식별로 처리
-        if processingMode == .auto {
-            processAutoMode(exiftoolPath: exiftoolPath, gpx: gpx, folder: folder)
-        } else {
-            // 단일 모드 처리
-            processSingleMode(exiftoolPath: exiftoolPath, gpx: gpx, folder: folder)
-        }
+        // 항상 XMP 사이드카 모드로 처리 (원본 파일 보호)
+        processSingleMode(exiftoolPath: exiftoolPath, gpx: gpx, folder: folder)
     }
     
-    private func processAutoMode(exiftoolPath: String, gpx: URL, folder: URL) {
-        addLog("🔄 Auto 모드: 파일 형식에 따라 자동 처리")
-        
-        // RAW 파일용 프로세스 (XMP 사이드카)
-        let rawTask = createExiftoolProcess(
-            exiftoolPath: exiftoolPath,
-            gpx: gpx,
-            folder: folder,
-            extensions: Array(rawExtensions),
-            useXMP: true
-        )
-        
-        // 일반 이미지용 프로세스 (직접 embed)
-        let imageTask = createExiftoolProcess(
-            exiftoolPath: exiftoolPath,
-            gpx: gpx,
-            folder: folder,
-            extensions: Array(imageExtensions),
-            useXMP: false
-        )
-        
-        var completedTasks = 0
-        let totalTasks = 2
-        
-        // RAW 파일 처리
-        addLog("📄 RAW 파일 처리 중 (XMP 사이드카 생성)...")
-        runExiftoolTask(rawTask) { [weak self] success in
-            completedTasks += 1
-            if success {
-                self?.addLog("✅ RAW 파일 처리 완료")
-            }
-            if completedTasks == totalTasks {
-                self?.finishProcessing(success: true)
-            }
-        }
-        
-        // 일반 이미지 처리
-        addLog("📝 일반 이미지 처리 중 (메타데이터 직접 삽입)...")
-        runExiftoolTask(imageTask) { [weak self] success in
-            completedTasks += 1
-            if success {
-                self?.addLog("✅ 일반 이미지 처리 완료")
-            }
-            if completedTasks == totalTasks {
-                self?.finishProcessing(success: true)
-            }
-        }
-    }
-    
+    // Auto 모드 제거 - 항상 XMP 사이드카 모드만 사용
+
     private func processSingleMode(exiftoolPath: String, gpx: URL, folder: URL) {
         let allExtensions = Array(rawExtensions.union(imageExtensions))
-        let useXMP = (processingMode == .sidecar)
-        
+        // 항상 XMP 사이드카 사용
+        let useXMP = true
+
         let task = createExiftoolProcess(
             exiftoolPath: exiftoolPath,
             gpx: gpx,
@@ -370,9 +346,11 @@ class GeoTagViewModel: ObservableObject {
             extensions: allExtensions,
             useXMP: useXMP
         )
-        
-        let modeDesc = useXMP ? "XMP 사이드카 모드" : "직접 embed 모드"
-        addLog("📍 \(modeDesc)로 처리 중...")
+
+        addLog("📍 XMP 사이드카 모드로 파일 처리 중...")
+        if existingXmpCount > 0 {
+            addLog("⏭️ 이미 XMP가 있는 파일은 자동으로 스킵됩니다")
+        }
         
         runExiftoolTask(task) { [weak self] success in
             self?.finishProcessing(success: success)
@@ -388,7 +366,7 @@ class GeoTagViewModel: ObservableObject {
     ) -> Process {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: exiftoolPath)
-        
+
         // exiftool 인자 구성
         var arguments = [
             "-r",  // 재귀적으로 하위 폴더 처리
@@ -396,29 +374,31 @@ class GeoTagViewModel: ObservableObject {
             "-api", "GeoMaxIntSecs=\(maxInterpolation)",
             "-api", "GeoMaxExtSecs=\(maxExtrapolation)"
         ]
-        
+
         // 타임존 오프셋 설정
         if !timezoneOffset.isEmpty && timezoneOffset != "+00:00" {
             arguments.append("-geotime<${DateTimeOriginal}\(timezoneOffset)")
         }
-        
-        // XMP 사이드카 또는 직접 embed
+
+        // XMP 사이드카 생성 (이미 존재하는 파일은 자동으로 스킵됨)
         if useXMP {
+            // ExifTool은 기본적으로 기존 파일을 덮어쓰지 않음
+            // -overwrite_original 옵션이 없으면 XMP가 이미 있는 경우 스킵
             arguments.append("-o")
             arguments.append("%d%f.xmp")
         } else {
             arguments.append("-overwrite_original_in_place")
         }
-        
+
         // 파일 확장자 필터
         for ext in extensions {
             arguments.append("-ext")
             arguments.append(ext)
         }
-        
+
         // 대상 폴더 추가
         arguments.append(folder.path)
-        
+
         task.arguments = arguments
         return task
     }
@@ -468,8 +448,12 @@ class GeoTagViewModel: ObservableObject {
         if success {
             progress = 1.0
             statusMessage = "완료"
-            addLog("✅ 모든 파일 처리가 완료되었습니다!")
-            addLog("💡 Lightroom에서 RAW 파일과 XMP를 함께 가져오면 위치 정보가 자동으로 적용됩니다.")
+            addLog("✅ 지오태깅 처리가 완료되었습니다!")
+            if existingXmpCount > 0 {
+                addLog("📝 \(existingXmpCount)개 파일은 이미 XMP가 있어 스킵되었습니다")
+            }
+            addLog("💡 Lightroom/Photoshop에서 파일과 XMP를 함께 가져오면 위치 정보가 자동으로 적용됩니다.")
+            addLog("🌐 동일한 파일명의 다른 형식들(jpg, raw 등)은 하나의 XMP를 공유합니다.")
         } else {
             statusMessage = "오류 발생"
             showError("일부 파일 처리 중 오류가 발생했습니다. 로그를 확인하세요.")
@@ -488,8 +472,12 @@ class GeoTagViewModel: ObservableObject {
                     progress = min(progress + 0.1, 0.9)
                 } else if lineStr.contains("directories scanned") {
                     progress = 0.3
-                } else if lineStr.contains("image files") {
-                    progress = 0.7
+                } else if lineStr.contains("image files created") {
+                    // "X image files created" 형태로 실제 생성된 파일 수 표시
+                    progress = 0.9
+                } else if lineStr.contains("image files unchanged") {
+                    // "X image files unchanged" 형태로 스킵된 파일 수 표시
+                    addLog("ℹ️ 일부 파일이 이미 처리되어 스킵되었습니다")
                 } else if lineStr.contains("✅") || lineStr.lowercased().contains("done") {
                     progress = 1.0
                 }
@@ -569,30 +557,38 @@ struct ContentView: View {
                             icon: "photo.on.rectangle.angled",
                             folder: viewModel.targetFolder,
                             photoCount: viewModel.photoCount,
+                            existingXmpCount: viewModel.existingXmpCount,
                             placeholder: "사진이 있는 폴더를 선택하세요",
                             action: viewModel.selectFolder
                         )
                         
-                        // Processing mode selection / 처리 모드 선택
+                        // Processing mode info / 처리 모드 정보
                         VStack(alignment: .leading, spacing: 12) {
-                            Label("처리 모드", systemImage: "gearshape.2.fill")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                            
-                            HStack(spacing: 12) {
-                                ForEach(GeoTagViewModel.ProcessingMode.allCases, id: \.self) { mode in
-                                    ModeButton(
-                                        mode: mode,
-                                        isSelected: viewModel.processingMode == mode,
-                                        isHovered: hoveredMode == mode
-                                    ) {
-                                        viewModel.processingMode = mode
-                                    }
-                                    .onHover { hovering in
-                                        hoveredMode = hovering ? mode : nil
-                                    }
+                            HStack {
+                                Label("처리 모드", systemImage: "gearshape.2.fill")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+
+                                Spacer()
+
+                                HStack(spacing: 8) {
+                                    Image(systemName: "doc.badge.plus")
+                                        .foregroundColor(.green)
+                                    Text("XMP 사이드카 (안전 모드)")
+                                        .font(.system(.body, design: .rounded))
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.green)
                                 }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(8)
                             }
+
+                            Text("ℹ️ 원본 파일을 수정하지 않고 XMP 사이드카 파일에 위치 정보를 저장합니다")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 4)
                         }
                         .padding(.horizontal, 30)
                         
@@ -703,6 +699,7 @@ struct FolderSelectionCard: View {
     let icon: String
     let folder: URL?
     let photoCount: Int
+    let existingXmpCount: Int
     let placeholder: String
     let action: () -> Void
     
@@ -720,13 +717,21 @@ struct FolderSelectionCard: View {
                                 .font(.system(.body, design: .rounded))
                                 .fontWeight(.medium)
                             if photoCount > 0 {
-                                Text("(\(photoCount)개)")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color.blue.opacity(0.1))
-                                    .cornerRadius(4)
+                                HStack(spacing: 4) {
+                                    Text("(\(photoCount)개)")
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+
+                                    if existingXmpCount > 0 {
+                                        Text("• \(existingXmpCount)개 완료")
+                                            .font(.caption)
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(4)
                             }
                         }
                         Text(folder.deletingLastPathComponent().path)
